@@ -127,7 +127,7 @@
     <div class="section-title">外気条件</div>
     
     <div class="api-select-container">
-        <label for="prefectureSelect">▼ 都道府県を選択して現在の現在気象を反映</label>
+        <label for="prefectureSelect">▼ 都道府県を選択して現在の気象を反映</label>
         <select id="prefectureSelect" onchange="fetchWeatherData()">
             <option value="">-- 都道府県を選択してください --</option>
             <!-- JavaScriptで選択肢を生成 -->
@@ -190,7 +190,7 @@
             <span class="result-value" id="resultHIn">-</span>
         </div>
 
-        <div class="section-title" style="border-left-color: #e74c3c;">熱負荷計算結果（絶対値表示）</div>
+        <div class="section-title" style="border-left-color: #e74c3c;">熱負荷計算結果</div>
         <div class="result-row">
             <span>顕熱負荷 (Sensible Heat)</span>
             <span class="result-value" id="resultQs">-</span>
@@ -206,7 +206,8 @@
     </div>
 
     <div class="note">
-        ※気象データは Open-Meteo API より各都道府県庁所在地の現在の予測観測データを取得しています。APIサーバーの応答状況によって取得できない場合があります。<br>
+        ※熱負荷は、外気が室内より「高温・高湿」な場合はプラス（冷房負荷側）、「低温・低湿」な場合はマイナス（暖房負荷側）として出力されます。<br>
+        ※気象データは Open-Meteo API より取得しています。APIサーバーの応答状況によって取得できない場合があります。<br>
         ※本計算は、標準大気圧(1013.25 hPa)および空気密度定数(1.20 kg/m³)を仮定した簡易計算値です。
     </div>
 </div>
@@ -286,7 +287,6 @@ async function fetchWeatherData() {
     statusEl.style.color = "#2980b9";
     statusEl.innerText = `${pref.name}の気象データを取得中...`;
 
-    // Open-Meteo API URL
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${pref.lat}&longitude=${pref.lon}&current=temperature_2m,relative_humidity_2m&timezone=Asia%2FTokyo`;
 
     try {
@@ -299,7 +299,6 @@ async function fetchWeatherData() {
         const temp = data.current.temperature_2m;
         const rh = data.current.relative_humidity_2m;
 
-        // 入力フォームに反映
         document.getElementById('tempOut').value = temp.toFixed(1);
         document.getElementById('rhOut').value = Math.round(rh);
 
@@ -343,15 +342,10 @@ function calculateLoad() {
     // 質量流量 (kg/h)
     const massFlow = vol * rho;
 
-    // 負荷計算 (基準計算)
-    let qt = (massFlow * (hOut - hIn)) / 3600;
-    let qs = (massFlow * 1.006 * (tOut - tIn)) / 3600;
-    let ql = qt - qs;
-
-    // 結果を絶対値（正の数）に変換
-    qt = Math.abs(qt);
-    qs = Math.abs(qs);
-    ql = Math.abs(ql);
+    // 負荷計算
+    const qt = (massFlow * (hOut - hIn)) / 3600;
+    const qs = (massFlow * 1.006 * (tOut - tIn)) / 3600;
+    const ql = qt - qs;
 
     // 結果表示
     document.getElementById('resultXOut').innerText = (xOut * 1000).toFixed(2) + " g/kg(DA)";
@@ -359,9 +353,10 @@ function calculateLoad() {
     document.getElementById('resultXIn').innerText = (xIn * 1000).toFixed(2) + " g/kg(DA)";
     document.getElementById('resultHIn').innerText = hIn.toFixed(2) + " kJ/kg";
 
-    document.getElementById('resultQs').innerText = qs.toFixed(3) + " kW (" + (qs * 1000).toFixed(0) + " W)";
-    document.getElementById('resultQl').innerText = ql.toFixed(3) + " kW (" + (ql * 1000).toFixed(0) + " W)";
-    document.getElementById('resultQt').innerText = qt.toFixed(3) + " kW (" + (qt * 1000).toFixed(0) + " W)";
+    // 符号付きで表示
+    document.getElementById('resultQs').innerText = (qs >= 0 ? "+" : "") + qs.toFixed(3) + " kW (" + (qs * 1000).toFixed(0) + " W)";
+    document.getElementById('resultQl').innerText = (ql >= 0 ? "+" : "") + ql.toFixed(3) + " kW (" + (ql * 1000).toFixed(0) + " W)";
+    document.getElementById('resultQt').innerText = (qt >= 0 ? "+" : "") + qt.toFixed(3) + " kW (" + (qt * 1000).toFixed(0) + " W)";
 
     document.getElementById('resultsArea').style.display = "block";
 }
