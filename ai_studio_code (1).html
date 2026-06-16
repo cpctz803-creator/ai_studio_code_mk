@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>外気負荷計算ツール (気象API連携版)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            font-size: 18px;
+            text-align: center;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+        .section-title {
+            font-size: 14px;
+            font-weight: bold;
+            border-left: 4px solid #3498db;
+            padding-left: 8px;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            color: #2c3e50;
+        }
+        .input-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            font-size: 12px;
+            margin-bottom: 5px;
+            color: #555;
+        }
+        input[type="number"], select {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: #fff;
+        }
+        .full-width {
+            grid-column: span 2;
+        }
+        .api-select-container {
+            background-color: #ebf5fb;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            border: 1px solid #d4e6f1;
+        }
+        .api-status {
+            font-size: 11px;
+            color: #2980b9;
+            margin-top: 5px;
+            min-height: 15px;
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background-color: #3498db;
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .results {
+            margin-top: 25px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            border: 1px solid #e9ecef;
+        }
+        .result-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+            font-size: 14px;
+        }
+        .result-row:last-child {
+            border-bottom: none;
+        }
+        .result-value {
+            font-weight: bold;
+        }
+        .total-load {
+            font-size: 16px;
+            color: #e74c3c;
+        }
+        .note {
+            font-size: 11px;
+            color: #7f8c8d;
+            margin-top: 15px;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>外気負荷計算ツール (気象API連携)</h1>
+    
+    <!-- 外気条件 -->
+    <div class="section-title">外気条件</div>
+    
+    <div class="api-select-container">
+        <label for="prefectureSelect">▼ 都道府県を選択して現在の気象を反映</label>
+        <select id="prefectureSelect" onchange="fetchWeatherData()">
+            <option value="">-- 都道府県を選択してください --</option>
+            <!-- JavaScriptで選択肢を生成 -->
+        </select>
+        <div class="api-status" id="apiStatus"></div>
+    </div>
+
+    <div class="input-group">
+        <div>
+            <label for="tempOut">外気温度 (°C)</label>
+            <input type="number" id="tempOut" value="35.0" step="0.1">
+        </div>
+        <div>
+            <label for="rhOut">外気相対湿度 (%)</label>
+            <input type="number" id="rhOut" value="60" step="1" min="0" max="100">
+        </div>
+    </div>
+
+    <!-- 室内条件 -->
+    <div class="section-title">室内条件</div>
+    <div class="input-group">
+        <div>
+            <label for="tempIn">室内温度 (°C)</label>
+            <input type="number" id="tempIn" value="26.0" step="0.1">
+        </div>
+        <div>
+            <label for="rhIn">室内相対湿度 (%)</label>
+            <input type="number" id="rhIn" value="50" step="1" min="0" max="100">
+        </div>
+    </div>
+
+    <!-- 風量 -->
+    <div class="section-title">風量</div>
+    <div class="input-group">
+        <div class="full-width">
+            <label for="volume">外気導入量 (m³/h)</label>
+            <input type="number" id="volume" value="1000" step="10">
+        </div>
+    </div>
+
+    <button onclick="calculateLoad()">計算実行</button>
+
+    <!-- 計算結果 -->
+    <div class="results" id="resultsArea" style="display:none;">
+        <div class="section-title" style="margin-top:0; border-left-color: #2ecc71;">状態量計算結果</div>
+        <div class="result-row">
+            <span>外気絶対湿度</span>
+            <span class="result-value" id="resultXOut">-</span>
+        </div>
+        <div class="result-row">
+            <span>外気比エンタルピー</span>
+            <span class="result-value" id="resultHOut">-</span>
+        </div>
+        <div class="result-row">
+            <span>室内絶対湿度</span>
+            <span class="result-value" id="resultXIn">-</span>
+        </div>
+        <div class="result-row">
+            <span>室内比エンタルピー</span>
+            <span class="result-value" id="resultHIn">-</span>
+        </div>
+
+        <div class="section-title" style="border-left-color: #e74c3c;">熱負荷計算結果</div>
+        <div class="result-row">
+            <span>顕熱負荷 (Sensible Heat)</span>
+            <span class="result-value" id="resultQs">-</span>
+        </div>
+        <div class="result-row">
+            <span>潜熱負荷 (Latent Heat)</span>
+            <span class="result-value" id="resultQl">-</span>
+        </div>
+        <div class="result-row total-load">
+            <span>全熱負荷 (Total Heat)</span>
+            <span class="result-value" id="resultQt">-</span>
+        </div>
+    </div>
+
+    <div class="note">
+        ※熱負荷は、外気が室内より「高温・高湿」な場合はプラス（冷房負荷側）、「低温・低湿」な場合はマイナス（暖房負荷側）として出力されます。<br>
+        ※気象データは Open-Meteo API より取得しています。APIサーバーの応答状況によって取得できない場合があります。<br>
+        ※本計算は、標準大気圧(1013.25 hPa)および空気密度定数(1.20 kg/m³)を仮定した簡易計算値です。
+    </div>
+</div>
+
+<script>
+// 47都道府県の県庁所在地の緯度・経度データ
+const prefectures = [
+    { name: "北海道 (札幌)", lat: 43.06, lon: 141.35 },
+    { name: "青森県", lat: 40.82, lon: 140.74 },
+    { name: "岩手県", lat: 39.70, lon: 141.15 },
+    { name: "宮城県", lat: 38.27, lon: 140.87 },
+    { name: "秋田県", lat: 39.72, lon: 140.10 },
+    { name: "山形県", lat: 38.26, lon: 140.34 },
+    { name: "福島県", lat: 37.75, lon: 140.47 },
+    { name: "茨城県", lat: 36.34, lon: 140.45 },
+    { name: "栃木県", lat: 36.57, lon: 139.88 },
+    { name: "群馬県", lat: 36.39, lon: 139.06 },
+    { name: "埼玉県", lat: 35.86, lon: 139.65 },
+    { name: "千葉県", lat: 35.61, lon: 140.12 },
+    { name: "東京都", lat: 35.69, lon: 139.69 },
+    { name: "神奈川県", lat: 35.45, lon: 139.64 },
+    { name: "新潟県", lat: 37.90, lon: 139.02 },
+    { name: "富山県", lat: 36.70, lon: 137.21 },
+    { name: "石川県", lat: 36.59, lon: 136.63 },
+    { name: "福井県", lat: 36.07, lon: 136.22 },
+    { name: "山梨県", lat: 35.66, lon: 138.57 },
+    { name: "長野県", lat: 36.65, lon: 138.18 },
+    { name: "岐阜県", lat: 35.42, lon: 136.76 },
+    { name: "静岡県", lat: 34.98, lon: 138.38 },
+    { name: "愛知県", lat: 35.18, lon: 136.91 },
+    { name: "三重県", lat: 34.73, lon: 136.51 },
+    { name: "滋賀県", lat: 35.00, lon: 135.87 },
+    { name: "京都府", lat: 35.01, lon: 135.76 },
+    { name: "大阪府", lat: 34.69, lon: 135.50 },
+    { name: "兵庫県", lat: 34.69, lon: 135.19 },
+    { name: "奈良県", lat: 34.69, lon: 135.83 },
+    { name: "和歌山県", lat: 34.23, lon: 135.17 },
+    { name: "鳥取県", lat: 35.50, lon: 134.24 },
+    { name: "島根県", lat: 35.47, lon: 133.05 },
+    { name: "岡山県", lat: 34.66, lon: 133.93 },
+    { name: "広島県", lat: 34.40, lon: 132.46 },
+    { name: "山口県", lat: 34.18, lon: 131.47 },
+    { name: "徳島県", lat: 34.07, lon: 134.56 },
+    { name: "香川県", lat: 34.34, lon: 134.04 },
+    { name: "愛媛県", lat: 33.84, lon: 132.77 },
+    { name: "高知県", lat: 33.56, lon: 133.53 },
+    { name: "福岡県", lat: 33.61, lon: 130.42 },
+    { name: "佐賀県", lat: 33.25, lon: 130.30 },
+    { name: "長崎県", lat: 32.75, lon: 129.87 },
+    { name: "熊本県", lat: 32.79, lon: 130.74 },
+    { name: "大分県", lat: 33.24, lon: 131.61 },
+    { name: "宮崎県", lat: 31.91, lon: 131.42 },
+    { name: "鹿児島県", lat: 31.56, lon: 130.56 },
+    { name: "沖縄県", lat: 26.21, lon: 127.68 }
+];
+
+// 初期化：セレクトボックスの生成
+const selectEl = document.getElementById('prefectureSelect');
+prefectures.forEach((pref, index) => {
+    const opt = document.createElement('option');
+    opt.value = index;
+    opt.textContent = pref.name;
+    selectEl.appendChild(opt);
+});
+
+// APIから気象データを取得
+async function fetchWeatherData() {
+    const selectedIdx = selectEl.value;
+    const statusEl = document.getElementById('apiStatus');
+    
+    if (selectedIdx === "") {
+        statusEl.innerText = "";
+        return;
+    }
+
+    const pref = prefectures[selectedIdx];
+    statusEl.style.color = "#2980b9";
+    statusEl.innerText = `${pref.name}の気象データを取得中...`;
+
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${pref.lat}&longitude=${pref.lon}&current=temperature_2m,relative_humidity_2m&timezone=Asia%2FTokyo`;
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error("ネットワークエラーが発生しました。");
+        }
+        const data = await response.json();
+        
+        const temp = data.current.temperature_2m;
+        const rh = data.current.relative_humidity_2m;
+
+        document.getElementById('tempOut').value = temp.toFixed(1);
+        document.getElementById('rhOut').value = Math.round(rh);
+
+        statusEl.style.color = "#27ae60";
+        statusEl.innerText = `【取得成功】 ${pref.name}の現在値 (温度: ${temp.toFixed(1)}°C / 湿度: ${Math.round(rh)}%) を反映しました。`;
+    } catch (error) {
+        console.error(error);
+        statusEl.style.color = "#c0392b";
+        statusEl.innerText = "データの取得に失敗しました。時間をおいて試すか、手入力してください。";
+    }
+}
+
+// 負荷計算
+function calculateLoad() {
+    const tOut = parseFloat(document.getElementById('tempOut').value);
+    const rhOut = parseFloat(document.getElementById('rhOut').value);
+    const tIn = parseFloat(document.getElementById('tempIn').value);
+    const rhIn = parseFloat(document.getElementById('rhIn').value);
+    const vol = parseFloat(document.getElementById('volume').value);
+
+    if (isNaN(tOut) || isNaN(rhOut) || isNaN(tIn) || isNaN(rhIn) || isNaN(vol)) {
+        alert("有効な数値を入力してください。");
+        return;
+    }
+
+    const P = 1013.25; // 大気圧 (hPa)
+    const rho = 1.20;  // 空気の密度 (kg/m3)
+
+    // 外気の計算
+    const psOut = 6.1078 * Math.pow(10, (7.5 * tOut) / (tOut + 237.3));
+    const pOut = psOut * (rhOut / 100);
+    const xOut = 0.622 * (pOut / (P - pOut)); 
+    const hOut = 1.006 * tOut + xOut * (2501 + 1.86 * tOut); 
+
+    // 室内の計算
+    const psIn = 6.1078 * Math.pow(10, (7.5 * tIn) / (tIn + 237.3));
+    const pIn = psIn * (rhIn / 100);
+    const xIn = 0.622 * (pIn / (P - pIn)); 
+    const hIn = 1.006 * tIn + xIn * (2501 + 1.86 * tIn); 
+
+    // 質量流量 (kg/h)
+    const massFlow = vol * rho;
+
+    // 負荷計算
+    const qt = (massFlow * (hOut - hIn)) / 3600;
+    const qs = (massFlow * 1.006 * (tOut - tIn)) / 3600;
+    const ql = qt - qs;
+
+    // 結果表示
+    document.getElementById('resultXOut').innerText = (xOut * 1000).toFixed(2) + " g/kg(DA)";
+    document.getElementById('resultHOut').innerText = hOut.toFixed(2) + " kJ/kg";
+    document.getElementById('resultXIn').innerText = (xIn * 1000).toFixed(2) + " g/kg(DA)";
+    document.getElementById('resultHIn').innerText = hIn.toFixed(2) + " kJ/kg";
+
+    // 符号付きで表示
+    document.getElementById('resultQs').innerText = (qs >= 0 ? "+" : "") + qs.toFixed(3) + " kW (" + (qs * 1000).toFixed(0) + " W)";
+    document.getElementById('resultQl').innerText = (ql >= 0 ? "+" : "") + ql.toFixed(3) + " kW (" + (ql * 1000).toFixed(0) + " W)";
+    document.getElementById('resultQt').innerText = (qt >= 0 ? "+" : "") + qt.toFixed(3) + " kW (" + (qt * 1000).toFixed(0) + " W)";
+
+    document.getElementById('resultsArea').style.display = "block";
+}
+</script>
+
+</body>
+</html>
